@@ -71,7 +71,7 @@ namespace Squirrel.Update
                 wnd = new AnimatedGifWindow();
                 wnd.Show();
 
-                Task.Delay(TimeSpan.FromSeconds(5.0), token).ContinueWith(t => {
+                Task.Delay(TimeSpan.FromMilliseconds(100), token).ContinueWith(t => {
                     if (t.IsCanceled) return;
                     wnd.Dispatcher.BeginInvoke(new Action(() => wnd.Topmost = false));
                 });

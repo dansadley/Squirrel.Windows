@@ -98,17 +98,10 @@ namespace Squirrel.Update
                 switch (opt.updateAction) {
 #if !MONO
                 case UpdateAction.Install:
-                    var processName = Process.GetCurrentProcess().ProcessName;
-                    if (Process.GetProcesses().Count(p => p.ProcessName == processName) > 1) {
-                        this.Log().Error("More than one process like me is running running. Couldn't continue.");
-                        break;
-                    }
-
                     var progressSource = new ProgressSource();
                     if (!opt.silentInstall) {
-                        AnimatedGifWindow.ShowWindow(TimeSpan.FromSeconds(4), animatedGifWindowToken.Token, progressSource);
+                        AnimatedGifWindow.ShowWindow(TimeSpan.FromMilliseconds(100), animatedGifWindowToken.Token, progressSource);
                     }
-
                     Install(opt.silentInstall, progressSource, Path.GetFullPath(opt.target)).Wait();
                     animatedGifWindowToken.Cancel();
                     break;

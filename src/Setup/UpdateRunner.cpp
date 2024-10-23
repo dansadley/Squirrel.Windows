@@ -167,6 +167,8 @@ int CUpdateRunner::ExtractUpdaterAndRun(wchar_t* lpCommandLine, bool useFallback
 	CResource zipResource;
 	wchar_t targetDir[MAX_PATH] = { 0 };
 	wchar_t logFile[MAX_PATH];
+	wchar_t lockFileName[MAX_PATH];
+	OVERLAPPED overlapped = { 0 };
 
 	std::vector<CString> to_delete;
 
@@ -205,6 +207,7 @@ gotADir:
 
 	wcscat_s(targetDir, _countof(targetDir), L"\\SquirrelTemp");
 
+
 	if (!CreateDirectory(targetDir, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
 		wchar_t err[4096];
 		_swprintf_c(err, _countof(err), L"Unable to write to %s - IT policies may be restricting access to this folder", targetDir);
@@ -213,10 +216,25 @@ gotADir:
 			DisplayErrorMessage(CString(err), NULL);
 		}
 
-		goto failedExtract;
+		goto failedExtractNoLock;
 	}
 
+
 	swprintf_s(logFile, L"%s\\SquirrelSetup.log", targetDir);
+
+	//acquire exclusive lock so that multiple starts do not obliterate the files while we're working
+	swprintf_s(lockFileName, L"%s\\app_install.lck", targetDir);
+
+	HANDLE hLockFile = CreateFile(lockFileName, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	if (hLockFile == INVALID_HANDLE_VALUE) {
+		return -1;
+	}
+
+	if (!LockFileEx(hLockFile, LOCKFILE_EXCLUSIVE_LOCK, 0, 0, 0, &overlapped)) {
+		CloseHandle(hLockFile);
+		return -1;
+	}
 
 	if (!zipResource.Load(L"DATA", IDR_UPDATE_ZIP)) {
 		goto failedExtract;
@@ -298,14 +316,33 @@ gotADir:
 
 	CloseHandle(pi.hProcess);
 	CloseHandle(pi.hThread);
+
+	if (!UnlockFileEx(hLockFile, 0, 0, 0, &overlapped)) {
+		CloseHandle(hLockFile);
+	}
+	CloseHandle(hLockFile);
+	//DeleteFile(lockFileName);
+
 	return (int) dwExitCode;
 
-failedExtract:
+failedExtractNoLock:
 	if (!useFallbackDir) {
 		// Take another pass at it, using C:\ProgramData instead
 		return ExtractUpdaterAndRun(lpCommandLine, true);
 	}
+	DisplayErrorMessage(CString(L"Failed to extract installer"), NULL);
+	return (int)dwExitCode;
 
+failedExtract:
+	if (!UnlockFileEx(hLockFile, 0, 0, 0, &overlapped)) {
+		CloseHandle(hLockFile);
+	}
+	CloseHandle(hLockFile);
+	//DeleteFile(lockFileName);
+	if (!useFallbackDir) {
+		// Take another pass at it, using C:\ProgramData instead
+		return ExtractUpdaterAndRun(lpCommandLine, true);
+	}
 	DisplayErrorMessage(CString(L"Failed to extract installer"), NULL);
 	return (int) dwExitCode;
 }
